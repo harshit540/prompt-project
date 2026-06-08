@@ -123,161 +123,187 @@
 
 
 
-// ===== CONFIG =====
-// Render deploy URL - replace with your actual Render URL after deploy
-const API_BASE = window.location.hostname === "localhost"
-  ? "http://localhost:3000"
-  : "https://YOUR-APP-NAME.onrender.com"; // ← CHANGE THIS after Render deploy
 
-// ===== STATE =====
-let allPrompts = [];
-let activeCategory = "all";
-let searchQuery = "";
+const express = require("express");
+const path    = require("path");
 
-// ===== INIT =====
-document.addEventListener("DOMContentLoaded", () => {
-  loadPrompts();
-  document.getElementById("searchInput").addEventListener("input", e => {
-    searchQuery = e.target.value.toLowerCase();
-    renderPrompts();
-  });
+const app  = express();
+const PORT = process.env.PORT || 3000;
+
+// GitHub config from environment variables
+const GH_TOKEN = process.env.GITHUB_TOKEN;
+const GH_OWNER = process.env.GITHUB_OWNER;
+const GH_REPO  = process.env.GITHUB_REPO;
+const GH_FILE  = process.env.GITHUB_FILE || "data/prompts.json";
+const GH_API   = `https://api.github.com/repos/${GH_OWNER}/${GH_REPO}/contents/${GH_FILE}`;
+
+// ===== MIDDLEWARE =====
+app.use(express.json());
+app.use(express.static(path.join(__dirname, "public")));
+
+// CORS
+app.use((req, res, next) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  if (req.method === "OPTIONS") return res.sendStatus(200);
+  next();
 });
 
-// ===== FETCH PROMPTS =====
-async function loadPrompts() {
+// ===== GITHUB HELPERS =====
+
+// GitHub thi prompts.json read karo
+async function readFromGitHub() {
+  const res = await fetch(GH_API, {
+    headers: {
+      Authorization: `Bearer ${GH_TOKEN}`,
+      Accept: "application/vnd.github+json"
+    }
+  });
+
+  if (!res.ok) {
+    if (res.status === 404) return { data: [], sha: null };
+    throw new Error(`GitHub read failed: ${res.status}`);
+  }
+
+  const json = await res.json();
+  const content = Buffer.from(json.content, "base64").toString("utf-8");
+  return { data: JSON.parse(content), sha: json.sha };
+}
+
+// GitHub par prompts.json write karo
+async function writeToGitHub(data, sha) {
+  const content = Buffer.from(JSON.stringify(data, null, 2)).toString("base64");
+
+  const body = {
+    message: `Update prompts.json [${new Date().toISOString()}]`,
+    content,
+    ...(sha ? { sha } : {})
+  };
+
+  const res = await fetch(GH_API, {
+    method: "PUT",
+    headers: {
+      Authorization: `Bearer ${GH_TOKEN}`,
+      Accept: "application/vnd.github+json",
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(body)
+  });
+
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`GitHub write failed: ${res.status} — ${err}`);
+  }
+
+  return await res.json();
+}
+
+// ===== ROUTES =====
+
+// GET all prompts
+app.get("/api/prompts", async (req, res) => {
   try {
-    const res = await fetch(`${API_BASE}/api/prompts`);
-    allPrompts = await res.json();
-    buildCategories();
-    renderPrompts();
-    animateCount(allPrompts.length);
-  } catch (err) {
-    document.getElementById("promptsGrid").innerHTML = `
-      <div class="empty-state">
-        <h3>⚡ Server Starting</h3>
-        <p>Please refresh in a moment. Render server may be waking up.</p>
-      </div>
-    `;
+    const { data } = await readFromGitHub();
+    res.json(data);
+  } catch (e) {
+    console.error("GET error:", e.message);
+    res.status(500).json({ error: e.message });
   }
-}
+});
 
-// ===== BUILD CATEGORY FILTERS =====
-function buildCategories() {
-  const cats = ["all", ...new Set(allPrompts.map(p => p.category).filter(Boolean))];
-  const container = document.getElementById("catFilter");
-  container.innerHTML = cats.map(cat => `
-    <button class="cat-btn ${cat === "all" ? "active" : ""}"
-      data-cat="${cat}"
-      onclick="setCategory('${cat}')">
-      ${cat === "all" ? "✨ All" : cat}
-    </button>
-  `).join("");
-}
+// POST - add new prompt
+app.post("/api/prompts", async (req, res) => {
+  const { title, category, label, prompt } = req.body;
 
-// ===== CATEGORY FILTER =====
-function setCategory(cat) {
-  activeCategory = cat;
-  document.querySelectorAll(".cat-btn").forEach(b => {
-    b.classList.toggle("active", b.dataset.cat === cat);
-  });
-  renderPrompts();
-}
-
-// ===== RENDER PROMPTS =====
-function renderPrompts() {
-  const grid = document.getElementById("promptsGrid");
-  const countEl = document.getElementById("resultsCount");
-
-  let filtered = allPrompts;
-
-  if (activeCategory !== "all") {
-    filtered = filtered.filter(p => p.category === activeCategory);
+  if (!title || !prompt) {
+    return res.status(400).json({ success: false, error: "Title and prompt required" });
   }
 
-  if (searchQuery) {
-    filtered = filtered.filter(p =>
-      p.title?.toLowerCase().includes(searchQuery) ||
-      p.prompt?.toLowerCase().includes(searchQuery) ||
-      p.category?.toLowerCase().includes(searchQuery) ||
-      p.label?.toLowerCase().includes(searchQuery)
-    );
+  try {
+    const { data, sha } = await readFromGitHub();
+
+    const item = {
+      id:       Date.now(),
+      title:    title.trim(),
+      category: (category || "General").trim(),
+      label:    (label || "").trim(),
+      prompt:   prompt.trim(),
+      date:     new Date().toISOString()
+    };
+
+    data.push(item);
+    await writeToGitHub(data, sha);
+
+    console.log(`✅ Added: "${item.title}"`);
+    res.json({ success: true, item });
+  } catch (e) {
+    console.error("POST error:", e.message);
+    res.status(500).json({ success: false, error: e.message });
   }
+});
 
-  countEl.textContent = `${filtered.length} prompt${filtered.length !== 1 ? "s" : ""}`;
+// PUT - update prompt
+app.put("/api/prompts/:id", async (req, res) => {
+  const id = parseInt(req.params.id);
 
-  if (filtered.length === 0) {
-    grid.innerHTML = `
-      <div class="empty-state">
-        <h3>No prompts found</h3>
-        <p>Try a different search or category.</p>
-      </div>
-    `;
-    return;
+  try {
+    const { data, sha } = await readFromGitHub();
+    const idx = data.findIndex(p => p.id === id);
+
+    if (idx === -1) return res.status(404).json({ success: false, error: "Not found" });
+
+    const { title, category, label, prompt } = req.body;
+    data[idx] = {
+      ...data[idx],
+      title:     (title    || data[idx].title).trim(),
+      category:  (category || data[idx].category).trim(),
+      label:     (label    !== undefined ? label : data[idx].label).trim(),
+      prompt:    (prompt   || data[idx].prompt).trim(),
+      updatedAt: new Date().toISOString()
+    };
+
+    await writeToGitHub(data, sha);
+
+    console.log(`✏️ Updated: "${data[idx].title}"`);
+    res.json({ success: true, item: data[idx] });
+  } catch (e) {
+    console.error("PUT error:", e.message);
+    res.status(500).json({ success: false, error: e.message });
   }
+});
 
-  // Reverse so newest appears first
-  grid.innerHTML = [...filtered].reverse().map((p, i) => `
-    <div class="prompt-card" style="animation-delay:${i * 0.04}s">
-      <div class="card-top">
-        <div class="card-title">${escHtml(p.title)}</div>
-        <span class="card-label ${getLabelClass(p.label)}">${escHtml(p.label || "Prompt")}</span>
-      </div>
-      <div class="card-category">📁 ${escHtml(p.category || "General")}</div>
-      <div class="card-prompt">${escHtml(p.prompt)}</div>
-      <div class="card-actions">
-        <button class="copy-btn" onclick="copyPrompt(this, \`${escAttr(p.prompt)}\`)">
-          📋 Copy Prompt
-        </button>
-      </div>
-    </div>
-  `).join("");
-}
+// DELETE - remove prompt
+app.delete("/api/prompts/:id", async (req, res) => {
+  const id = parseInt(req.params.id);
 
-// ===== COPY =====
-function copyPrompt(btn, text) {
-  navigator.clipboard.writeText(text).then(() => {
-    btn.textContent = "✅ Copied!";
-    setTimeout(() => btn.textContent = "📋 Copy Prompt", 2000);
-    showToast();
-  });
-}
+  try {
+    let { data, sha } = await readFromGitHub();
+    const prev = data.length;
+    data = data.filter(p => p.id !== id);
 
-function showToast() {
-  const t = document.getElementById("toast");
-  t.classList.add("show");
-  setTimeout(() => t.classList.remove("show"), 2500);
-}
+    if (data.length === prev) {
+      return res.status(404).json({ success: false, error: "Not found" });
+    }
 
-// ===== ANIMATE COUNT =====
-function animateCount(target) {
-  const el = document.getElementById("totalCount");
-  let current = 0;
-  const step = Math.max(1, Math.floor(target / 40));
-  const timer = setInterval(() => {
-    current = Math.min(current + step, target);
-    el.textContent = current;
-    if (current >= target) clearInterval(timer);
-  }, 30);
-}
+    await writeToGitHub(data, sha);
 
-// ===== HELPERS =====
-function getLabelClass(label) {
-  if (!label) return "label-default";
-  const l = label.toLowerCase();
-  if (l.includes("trend")) return "label-trending";
-  if (l.includes("new"))   return "label-new";
-  if (l.includes("free"))  return "label-free";
-  return "label-default";
-}
+    console.log(`🗑 Deleted ID: ${id}`);
+    res.json({ success: true });
+  } catch (e) {
+    console.error("DELETE error:", e.message);
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
 
-function escHtml(str = "") {
-  return String(str)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
+// Fallback
+app.get("*", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "index.html"));
+});
 
-function escAttr(str = "") {
-  return String(str).replace(/`/g, "\\`").replace(/\$/g, "\\$");
-}
+// ===== START =====
+app.listen(PORT, () => {
+  console.log(`⚡ PromptVault running on port ${PORT}`);
+  console.log(`📦 GitHub: ${GH_OWNER}/${GH_REPO}/${GH_FILE}`);
+  if (!GH_TOKEN) console.warn("⚠️  GITHUB_TOKEN not set!");
+});
