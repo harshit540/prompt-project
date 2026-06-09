@@ -24,12 +24,13 @@
 <!-- ADMIN PANEL -->
 <div id="adminPanel" style="display:none;">
 
+  <!-- DESKTOP SIDEBAR -->
   <aside class="sidebar">
     <div class="sidebar-logo">⚡ Admin</div>
     <nav class="sidebar-nav">
-      <a class="side-link active" onclick="showTab('add')" href="#">➕ Add Prompt</a>
-      <a class="side-link" onclick="showTab('manage')" href="#">📋 Manage</a>
-      <a class="side-link" onclick="showTab('stats')" href="#">📊 Stats</a>
+      <a class="side-link active" onclick="showTab('add', this)" href="#">➕ Add Prompt</a>
+      <a class="side-link" onclick="showTab('manage', this)" href="#">📋 Manage</a>
+      <a class="side-link" onclick="showTab('stats', this)" href="#">📊 Stats</a>
       <a class="side-link logout" onclick="doLogout()" href="#">🚪 Logout</a>
     </nav>
 
@@ -51,7 +52,6 @@
     <!-- ADD PROMPT TAB -->
     <div id="tab-add" class="tab-content active">
       <h1 class="admin-page-title">Add New Prompt</h1>
-
       <div class="form-card">
         <div class="form-row">
           <div class="form-group">
@@ -95,6 +95,25 @@
     </div>
 
   </main>
+
+  <!-- MOBILE BOTTOM NAV -->
+  <nav class="mobile-nav">
+    <div class="mobile-nav-inner">
+      <button class="mobile-nav-btn active" id="mnav-add" onclick="showTab('add', this, true)">
+        <span class="nav-icon">➕</span>Add
+      </button>
+      <button class="mobile-nav-btn" id="mnav-manage" onclick="showTab('manage', this, true)">
+        <span class="nav-icon">📋</span>Manage
+      </button>
+      <button class="mobile-nav-btn" id="mnav-stats" onclick="showTab('stats', this, true)">
+        <span class="nav-icon">📊</span>Stats
+      </button>
+      <button class="mobile-nav-btn logout-m" onclick="doLogout()">
+        <span class="nav-icon">🚪</span>Logout
+      </button>
+    </div>
+  </nav>
+
 </div>
 
 <!-- EDIT MODAL -->

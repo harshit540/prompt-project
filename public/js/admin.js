@@ -93,11 +93,21 @@ function doLogout() {
 }
 
 // ===== TABS =====
-function showTab(name) {
+function showTab(name, el, isMobile) {
+  // Tab content switch
   document.querySelectorAll(".tab-content").forEach(t => t.classList.remove("active"));
-  document.querySelectorAll(".side-link").forEach(l => l.classList.remove("active"));
   document.getElementById(`tab-${name}`).classList.add("active");
-  event.currentTarget.classList.add("active");
+
+  // Desktop sidebar active
+  document.querySelectorAll(".side-link").forEach(l => l.classList.remove("active"));
+  // Mobile bottom nav active
+  document.querySelectorAll(".mobile-nav-btn").forEach(l => l.classList.remove("active"));
+
+  if (el) el.classList.add("active");
+
+  // Sync both navs
+  const mnavEl = document.getElementById(`mnav-${name}`);
+  if (mnavEl) mnavEl.classList.add("active");
 
   if (name === "manage") loadManage();
   if (name === "stats")  loadStats();
