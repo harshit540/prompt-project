@@ -1,8 +1,7 @@
 // ===== CONFIG =====
-// Render deploy URL - replace with your actual Render URL after deploy
 const API_BASE = window.location.hostname === "localhost"
   ? "http://localhost:3000"
-  : "https://prompt-project-r4v9.onrender.com";; // ← CHANGE THIS after Render deploy
+  : "https://prompt-project-r4v9.onrender.com";
 
 // ===== STATE =====
 let allPrompts = [];
@@ -90,7 +89,10 @@ function renderPrompts() {
     return;
   }
 
-  // Reverse so newest appears first
+  // Store prompts in a map so copy button can access by id
+  window._promptMap = {};
+  filtered.forEach(p => { window._promptMap[p.id] = p.prompt; });
+
   grid.innerHTML = [...filtered].reverse().map((p, i) => `
     <div class="prompt-card" style="animation-delay:${i * 0.04}s">
       <div class="card-top">
@@ -100,7 +102,7 @@ function renderPrompts() {
       <div class="card-category">📁 ${escHtml(p.category || "General")}</div>
       <div class="card-prompt">${escHtml(p.prompt)}</div>
       <div class="card-actions">
-        <button class="copy-btn" onclick="copyPrompt(this, \`${escAttr(p.prompt)}\`)">
+        <button class="copy-btn" data-id="${p.id}" onclick="copyPrompt(this)">
           📋 Copy Prompt
         </button>
       </div>
@@ -109,7 +111,10 @@ function renderPrompts() {
 }
 
 // ===== COPY =====
-function copyPrompt(btn, text) {
+// data-id attribute thi prompt fetch kariye — no special character issues
+function copyPrompt(btn) {
+  const id = btn.getAttribute("data-id");
+  const text = window._promptMap[id] || "";
   navigator.clipboard.writeText(text).then(() => {
     btn.textContent = "✅ Copied!";
     setTimeout(() => btn.textContent = "📋 Copy Prompt", 2000);
@@ -151,8 +156,4 @@ function escHtml(str = "") {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
-}
-
-function escAttr(str = "") {
-  return String(str).replace(/`/g, "\\`").replace(/\$/g, "\\$");
 }
