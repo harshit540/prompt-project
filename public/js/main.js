@@ -2,7 +2,7 @@
 // Render deploy URL - replace with your actual Render URL after deploy
 const API_BASE = window.location.hostname === "localhost"
   ? "http://localhost:3000"
-  : "https://prompt-vault-xxxx.onrender.com";; // ← CHANGE THIS after Render deploy
+  : "https://prompt-vault-r4v9.onrender.com";; // ← CHANGE THIS after Render deploy
 
 // ===== STATE =====
 let allPrompts = [];
